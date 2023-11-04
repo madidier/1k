@@ -1,68 +1,41 @@
+import { isAscii, isContinuation, isIllegal, isLead2, isLead3 } from "./utf-8";
+
+class DecodeError extends Error {
+  constructor() {
+    super('Invalid UTF-8');
+    Object.setPrototypeOf(this, DecodeError.prototype);
+  }
+}
+
 // A Cursor represents a position in a buffer along with a partially written
-// byte. A Cursor is immutable to facilitate cheap backtracking; a rolled-back
-// Cursor will simply overwrite content from aborted cursors.
-
-import { isAscii, isContinuation, leadLength } from "./utf-8";
-
-// Content is written in big endian order.
+// utf-8 possibly multi-byte character. A Cursor is immutable but not the
+// buffer it contains, but because data is written sequentially, simple
+// backtracking is possible.
+// A Cursor will not try to fix encoding errors, but will throw on invalid
+// utf-8 input, allowing higher level code to backtrack as needed.
 class Cursor {
   private constructor(
     private readonly buffer: Uint8Array,
     private readonly offset: number,
-    // The current partial byte, not shifted yet:
-    private readonly partialByte: number,
-    // How many bits were already added to the partial byte
-    private readonly partialBits: number) {
+    // The current partial utf-8 character in a 32-bits unsigned integer.
+    // It is shifted to the left, so a single space character is 0x20000000.
+    private readonly data: number,
+    // How many bits were already added to the partial utf-8 character.
+    private readonly bitCount: number) {
   }
 
   public static init(bufferSize: number) {
     return new Cursor(new Uint8Array(bufferSize), 0, 0, 0);
   }
 
-  public decodePartialStrict() {
-    // FIXME: Move to uft-8.ts
-    // If the buffer stops at a partially encoded multi-byte character,
-    // do not try to decode those partial utf-8 characters.
-    //
-    // Function will throw a TypeError if there is a decoding error.
+  public decodePartial() {
+    // It should not be possible for invalid utf-8 to be present in the buffer.
+    return new TextDecoder('utf-8')
+      .decode(new DataView(this.buffer.buffer, 0, this.offset));
+  }
 
-    // Count the consecutive continuation bytes in the tail
-    let nContinuations = 0;
-    while (
-      nContinuations > this.offset
-      && isContinuation(this.buffer[this.offset - 1 - nContinuations])
-    ) {
-      nContinuations += 1;
-      if (nContinuations > 3) {
-        throw new TypeError(
-          'decode error (too many consecutive continuation bytes in tail)'
-        );
-      }
-    }
-
-    if (nContinuations > 0) {
-      if (nContinuations == this.offset) {
-        throw new TypeError(
-          'decode error (buffer starts with a continuation byte)'
-        );
-      }
-
-      const leadLen = leadLength(this.buffer[this.offset - 1 - nContinuations]);
-      if (leadLen < nContinuations + 1) {
-        throw new TypeError(
-          'decode error (continuation byte in an invalid position)'
-        );
-      }
-    }
-
-    // It is also possible to have a buffer that ends with a leading byte.
-    const trimLength = (
-      nContinuations > 0 ? nContinuations + 1 :
-        this.offset > 0 && !isAscii(this.buffer[this.offset - 1]) ? 1 : 0
-    );
-
-    return new TextDecoder('utf-8', { fatal: true })
-      .decode(new DataView(this.buffer.buffer, 0, this.offset - trimLength));
+  public get isCommitted() {
+    return this.bitCount === 0;
   }
 
   public writeHex(digits: string): Cursor {
@@ -77,46 +50,131 @@ class Cursor {
     return cur;
   }
 
-  public write(content: number, bits: number): Cursor {
-    if (bits < 0 || bits > 32) {
+  public write(content: number, bitsToWrite: number): Cursor {
+    if (bitsToWrite < 0 || bitsToWrite > 32) {
       throw new Error('bits must be an integer between 0 and 32');
     }
-    if ((content & ((1 << bits) - 1)) !== content) {
+    if ((content & ((1 << bitsToWrite) - 1)) !== content) {
       throw new Error('content has more bits than expected');
     }
 
-    // Using recursion because I'm lazy and it's easier here :)
-    if (this.partialBits + bits < 8) {
-      return new Cursor(
-        this.buffer,
-        this.offset,
-        (this.partialByte << bits) | content,
-        this.partialBits + bits,
-      );
-    } else {
-      const bitsTaken = 8 - this.partialBits;
-      const bitsOverflow = bits - bitsTaken;
-      // Commit a byte:
-      this.buffer.set(
-        [(this.partialByte << bitsTaken) | (content >> bitsOverflow)],
-        this.offset,
-      );
-      return new Cursor(
-        this.buffer,
-        this.offset + 1,
-        0,
-        0
-      ).write(content & ((1 << bitsOverflow) - 1), bitsOverflow);
+    const bitCount = this.bitCount + bitsToWrite;
+
+    if (bitCount > 32) {
+      const overflowBits = bitCount - 32;
+      return this
+        .write(content >> overflowBits, bitsToWrite - overflowBits)
+        .writeTail(content, overflowBits);
     }
+
+    const data = this.data | (content << (32 - bitCount));
+
+    if (bitCount < 8) {
+      return new Cursor(this.buffer, this.offset, data, bitCount);
+    }
+
+    const firstByte = data >> 24;
+
+    if (isAscii(firstByte)) {
+      this.buffer.set([firstByte], this.offset);
+      return new Cursor(this.buffer, this.offset + 1, 0, 0)
+        .writeTail(content, bitCount - 8);
+    }
+
+    if (isContinuation(firstByte) || isIllegal(firstByte)) {
+      throw new DecodeError();
+    }
+
+    if (bitCount < 16) {
+      return new Cursor(this.buffer, this.offset, data, bitCount);
+    }
+
+    const secondByte = (data >> 16) & 255;
+
+    if (!isContinuation(secondByte)) {
+      throw new DecodeError();
+    }
+
+    if (isLead2(firstByte)) {
+      this.buffer.set([firstByte, secondByte], this.offset);
+      return new Cursor(this.buffer, this.offset + 2, 0, 0)
+        .writeTail(content, bitCount - 16);
+    }
+
+    if (bitCount < 24) {
+      return new Cursor(this.buffer, this.offset, data, bitCount);
+    }
+
+    const thirdByte = (data >> 24) & 255;
+
+    if (!isContinuation(thirdByte)) {
+      throw new DecodeError();
+    }
+
+    if (isLead3(firstByte)) {
+      this.buffer.set([firstByte, secondByte, thirdByte], this.offset);
+      return new Cursor(this.buffer, this.offset + 3, 0, 0)
+        .writeTail(content, bitCount - 24);
+    }
+
+    if (bitCount < 32) {
+      return new Cursor(this.buffer, this.offset, data, bitCount);
+    }
+
+    const lastByte = data & 255;
+
+    if (!isContinuation(lastByte)) {
+      throw new DecodeError();
+    }
+
+    this.buffer.set([firstByte, secondByte, thirdByte, lastByte], this.offset);
+    return new Cursor(this.buffer, this.offset + 4, 0, 0);
   }
 
+
+  private writeTail(content: number, bits: number): Cursor {
+    return this.write(content & ((1 << bits) - 1), bits);
+  }
 }
 
-export function decode(input: string): { decoded: string, chunks: string[] } {
-  const chunks = Array
+function chunksOf(input: string): string[] {
+  return Array
     .from(input.matchAll(/[0-9a-f]*[0-9][0-9a-f]*/gi))
     .map(([chunk]) => chunk)
     .filter(chunk => chunk.length > 3);
+}
+
+export function decodeLenient(input: string): { decoded: string, chunks: string[] } {
+  const chunks = chunksOf(input).filter(chunk => !chunk.startsWith('000'));
+  const realInput = chunks.join('');
+
+  let commit = {
+    cursor: Cursor.init(realInput.length / 2),
+    index: 0,
+  };
+  while (commit.index < realInput.length) {
+    let index = commit.index;
+    let cursor = commit.cursor;
+    try {
+      while (index < realInput.length) {
+        cursor = cursor.writeHex(realInput[index++]);
+        if (cursor.isCommitted) {
+          commit = { cursor, index };
+        }
+      }
+    } catch (err) {
+      if (err instanceof DecodeError) {
+        commit.index += 1; // rollback and skip a hex digit
+      } else {
+        throw err;
+      }
+    }
+  }
+  return { decoded: commit.cursor.decodePartial(), chunks };
+}
+
+export function decodeStrict(input: string): { decoded: string, chunks: string[] } {
+  const chunks = chunksOf(input);
 
   let totalLength = 0;
   for (const chunk of chunks) {
@@ -126,12 +184,11 @@ export function decode(input: string): { decoded: string, chunks: string[] } {
   let cursor = Cursor.init(totalLength / 2);
   const retainedChunks: string[] = [];
   for (const chunk of chunks) {
-    const nextCur = cursor.writeHex(chunk);
-    let decoded;
+    let nextCur;
     try {
-      decoded = nextCur.decodePartialStrict();
+      nextCur = cursor.writeHex(chunk);
     } catch (e) {
-      if (e instanceof TypeError) {
+      if (e instanceof DecodeError) {
         continue; // Skip this chunk.
       } else {
         throw e;
@@ -139,7 +196,7 @@ export function decode(input: string): { decoded: string, chunks: string[] } {
     }
     // Skip the chunk if it contains non-printable codepoints (those are in
     // the ascii range, so no risk of finding leftovers from a previous chunk)
-    if (/[\x00-\x1F]/.test(decoded)) {
+    if (/[\x00-\x1F]/.test(nextCur.decodePartial())) {
       continue;
     }
     retainedChunks.push(chunk);
@@ -147,7 +204,7 @@ export function decode(input: string): { decoded: string, chunks: string[] } {
   }
 
   return {
-    decoded: cursor.decodePartialStrict(),
+    decoded: cursor.decodePartial(),
     chunks: retainedChunks,
   };
 }

@@ -2,13 +2,13 @@ import b from './bulma.module.scss';
 import { classes } from './utils';
 import ghLogo from './assets/github-mark.svg';
 import { useEffect, useState } from 'react';
-import { decode } from './decode';
+import { decodeLenient } from './decode';
 import { createWorker } from 'tesseract.js';
 
 function App() {
   const [dragOver, setDragOver] = useState(false);
   const [input, setInput] = useState('');
-  const { chunks, decoded } = decode(input);
+  const { chunks, decoded } = decodeLenient(input);
 
   const [working, setWorking] = useState(false);
 
