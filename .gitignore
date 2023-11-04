@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# git worktree add:
+/gh-pages
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

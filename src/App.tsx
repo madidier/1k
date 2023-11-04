@@ -17,10 +17,15 @@ function App() {
       return;
     }
     setWorking(true);
-    const worker = await createWorker('eng');
-    const result = await worker.recognize(input, undefined, { text: true });
-    setInput(result.data.text);
-    setWorking(false);
+    try {
+      const worker = await createWorker('eng');
+      const result = await worker.recognize(input, undefined, { text: true });
+      setInput(result.data.text);
+    } catch (err) {
+      setInput(JSON.stringify(err));
+    } finally {
+      setWorking(false);
+    }
   }
 
   function handleDataTransfer(t: DataTransfer) {
