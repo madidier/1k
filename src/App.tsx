@@ -146,7 +146,7 @@ function App() {
             </p>
             <div
               className={b.panelBlock}
-              style={{ whiteSpace: 'pre-wrap' }}
+              style={{ whiteSpace: 'break-spaces' }}
             >
               <div className={b.content}>
                 <p className={classes({
@@ -159,7 +159,7 @@ function App() {
                 {chunks.length > 0 &&
                   <>
                     <p>The following bits were used to get to this result:</p>
-                    <ul>
+                    <ul style={{ overflowWrap: 'anywhere' }}>
                       {chunks.map((chunk, index) => <li key={index}>{chunk}</li>)}
                     </ul>
                   </>
