@@ -162,6 +162,7 @@ export function decodeLenient(input: string): { decoded: string, chunks: string[
           commit = { cursor, index };
         }
       }
+      break;
     } catch (err) {
       if (err instanceof DecodeError) {
         commit.index += 1; // rollback and skip a hex digit
