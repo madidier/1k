@@ -148,8 +148,14 @@ class Cursor {
 }
 
 function chunksOf(input: string): string[] {
+  // This could perhaps be made obsolete by tweaking tesseract options.
+  const fixedInput = input
+    .replace('{', 'f')
+    .replace('¢', 'c')
+    .replace('€', 'e');
+
   return Array
-    .from(input.matchAll(/[0-9a-f]*[0-9][0-9a-f]*/gi))
+    .from(fixedInput.matchAll(/[0-9a-f]*[0-9][0-9a-f]*/gi))
     .map(([chunk]) => chunk)
     .filter(chunk => chunk.length > 3);
 }
