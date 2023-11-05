@@ -1,9 +1,16 @@
 import { isAscii, isContinuation, isIllegal, isLead2, isLead3 } from "./utf-8";
 
 class DecodeError extends Error {
-  constructor() {
-    super('Invalid UTF-8');
+  constructor(message?: string) {
+    super(message || 'Invalid UTF-8');
     Object.setPrototypeOf(this, DecodeError.prototype);
+  }
+}
+
+class NonPrintableDecodeError extends DecodeError {
+  constructor() {
+    super('Non-printable character detected');
+    Object.setPrototypeOf(this, NonPrintableDecodeError.prototype);
   }
 }
 
@@ -76,6 +83,9 @@ class Cursor {
     const firstByte = data >> 24;
 
     if (isAscii(firstByte)) {
+      if (firstByte < 0x20) {
+        throw new NonPrintableDecodeError();
+      }
       this.buffer.set([firstByte], this.offset);
       return new Cursor(this.buffer, this.offset + 1, 0, 0)
         .writeTail(content, bitCount - 8);
@@ -145,7 +155,7 @@ function chunksOf(input: string): string[] {
 }
 
 export function decodeLenient(input: string): { decoded: string, chunks: string[] } {
-  const chunks = chunksOf(input).filter(chunk => !chunk.startsWith('000'));
+  const chunks = chunksOf(input).filter(chunk => !chunk.includes('00'));
   const realInput = chunks.join('');
 
   let commit = {
