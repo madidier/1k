@@ -171,30 +171,28 @@ function App() {
                 <p>Tips to improve results:</p>
                 <ul>
                   <li>
-                    Edit the text to remove text and numbers that are not part of the "code".
-                  </li>
-                  <li>
-                    If the "code" contains many spaces, make sure the
-                    letters/digits are not isolated by removing some of the
-                    spaces.
+                    Remove irrelevant numbers from the input.
                   </li>
                   <li>
                     Tesseract may misread a letter here and there, or worse,
-                    completely miss one. This can cause a chunk of "code" to
-                    be rejected because it results in corrupted text.
-                    In such cases, inserting spaces in a big chunk of "code"
-                    can help you figure out where something's missing or was
-                    misread by tesseract. Other software may be better than
-                    tesseract at recognizing screen text.
+                    completely miss one. This tool will try to detect and work
+                    around corrupted bits, but it can't do miracles. If the
+                    result is too bad, proof read and fix the code in the
+                    transcript. "20" corresponds to spaces, "0a" to line
+                    breaks, you may insert some to pin point a decoding issue.
                   </li>
                   <li>
-                    Windows 11 (10 also ?) can recognize text from
-                    screenshots. After taking a screenshot, click the
-                    notification to open Snipping Tool, then click the
-                    "Text actions" icon in the toolbar. You may then either
-                    just click on "Copy all text" or select the text to copy
-                    from the screenshot. It gives excellent results on
-                    screenshots from The Talos Principle 2.
+                    Any "code" that contains "00" will be ignored by the tool.
+                    This should not occur in text that is meant to be decoded,
+                    but could be present as a result of a text recognition
+                    mistake. It is unlikely and has never happened during my
+                    playthrough. If it happens anyway, just fix the transcript.
+                  </li>
+                  <li>
+                    Windows 11 users: The "Snipping tool" that comes with
+                    Windows has an excellent text recognition feature, use it.
+                    Just take a screenshot as normal, and then click the
+                    notification to get access to it.
                   </li>
                 </ul>
               </div>

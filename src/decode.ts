@@ -83,7 +83,7 @@ class Cursor {
     const firstByte = data >> 24;
 
     if (isAscii(firstByte)) {
-      if (firstByte < 0x20) {
+      if (firstByte < 0x20 && firstByte != 0x0a) {
         throw new NonPrintableDecodeError();
       }
       this.buffer.set([firstByte], this.offset);
