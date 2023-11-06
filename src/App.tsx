@@ -4,13 +4,14 @@ import ghLogo from './assets/github-mark.svg';
 import { useEffect, useState } from 'react';
 import { decodeLenient } from './decode';
 import { createWorker } from 'tesseract.js';
+import Win11OcrTuto from './Win11OcrTuto';
 
 function App() {
   const [dragOver, setDragOver] = useState(false);
   const [input, setInput] = useState('');
   const { chunks, decoded } = decodeLenient(input);
-
   const [working, setWorking] = useState(false);
+  const [showWin11Tuto, setShowWin11Tuto] = useState(false);
 
   async function readImage(input: File) {
     if (working) {
@@ -67,12 +68,9 @@ function App() {
     <>
       <nav className={b.navbar} role='navigation' aria-label='main navigation'>
         <div className={b.navbarBrand}>
-          <span className={classes({
-            [b.isSize3]: true,
-            [b.hasTextWeightBold]: true,
-            [b.isFamilyCode]: true,
-            [b.ml2]: true,
-          })}>1K</span>
+          <span className={classes(b.isSize3, b.hasTextWeightBold, b.isFamilyCode, b.ml2)}>
+            1K
+          </span>
         </div>
 
         <div className={b.navbarMenu}>
@@ -109,8 +107,7 @@ function App() {
             <div className={b.panelBlock}>
               <p className={b.control}>
                 <button
-                  className={classes({
-                    [b.button]: true,
+                  className={classes(b.button, {
                     [b.isLink]: !working && dragOver,
                     [b.isLoading]: working,
                   })}
@@ -179,20 +176,31 @@ function App() {
                     around corrupted bits, but it can't do miracles. If the
                     result is too bad, proof read and fix the code in the
                     transcript. "20" corresponds to spaces, "0a" to line
-                    breaks, you may insert some to pin point a decoding issue.
+                    breaks, you may insert some to pinpoint a decoding issue.
                   </li>
                   <li>
-                    Any "code" that contains "00" will be ignored by the tool.
-                    This should not occur in text that is meant to be decoded,
-                    but could be present as a result of a text recognition
-                    mistake. It is unlikely and has never happened during my
-                    playthrough. If it happens anyway, just fix the transcript.
+                    Any "code" that contains 000 or starts with 00 will be
+                    considered irrelevant by this tool. This should never occur
+                    in text that is meant to be decoded, but could be present
+                    as a result of a text recognition mistake. It is unlikely
+                    and has never happened during my playthrough. If it
+                    happens anyway, just fix the transcript.
                   </li>
                   <li>
-                    Windows 11 users: The "Snipping tool" that comes with
-                    Windows has an excellent text recognition feature, use it.
-                    Just take a screenshot as normal, and then click the
-                    notification to get access to it.
+                    <em>Windows 11 users</em>: there's a better way to extract
+                    text from screenshots without additional software.{' '}
+                    <a role='button' tabIndex={0} onClick={e => {
+                      e.preventDefault();
+                      setShowWin11Tuto(true);
+                    }}>
+                      Read this
+                    </a>.
+                  </li>
+                  <li>
+                    If you know how to create a tesseract .traineddata file
+                    tailored for this use case and want to help improve this
+                    tool, please open an issue on GitHub. Ditto if you know
+                    of a better OCR library that can run in a web page.
                   </li>
                 </ul>
               </div>
@@ -209,6 +217,8 @@ function App() {
           </p>
         </div>
       </section>
+
+      {showWin11Tuto && <Win11OcrTuto onDismiss={() => setShowWin11Tuto(false)} />}
     </>
   );
 }
